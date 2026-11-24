@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 from core.db import transaction
+from domain import retests
 from domain.interventions import findings,tickets
 from domain.soundboard import points,windows
 
@@ -36,6 +37,11 @@ def latest(conn,point,purpose):
 def patchboard():
     with transaction() as conn:
         return {"points":query(conn,points),"tickets":query(conn,tickets)}
+
+
+def retest_ledger(ticket=None):
+    with transaction() as conn:
+        return retests.ledger(conn,ticket)
 
 
 def audio():

@@ -2,7 +2,8 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from core.audit import record
 from core.db import metadata,transaction
-from core.queueing import result,submit
+from core.queueing import result
+from domain import retests
 from domain.catalog import calibration,latest,one,same_slot
 from domain.interventions import findings,tickets
 from domain.learning import relative_to
@@ -56,23 +57,43 @@ def ensure_reline(conn,ticket,focus):
 
 def probe(code,form,user):
     with transaction() as conn:
-        ticket=one(conn,tickets,code)
+        ticket=one(conn,tickets,code,lock=True)
+        if ticket["state"]!=Ticket.ISOLATED:
+            raise HTTPException(409,"线路已复位或不在隔离阶段")
         focus=one(conn,windows,form.window)
-        ensure_reline(conn,ticket,focus)
-        return submit(user,{"kind":"reline","ticket":code,"focus":focus,
-                            "baseline":calibration(conn),"simultaneous":[]})
+        existing=retests.find(conn,code,focus["code"],lock=True)
+        if existing is not None:
+            row,created=existing,False
+        else:
+            ensure_reline(conn,ticket,focus)
+            payload={"kind":"reline","ticket":code,"focus":focus,
+                     "baseline":calibration(conn),"simultaneous":[]}
+            row,created=retests.open_retest(conn,code,focus,payload,user),True
+            record(conn,user,f"reline-probe:{code}:{focus['code']}")
+    if row["status"]==retests.PENDING:
+        retests.resume_one(row)
+    return {"token":row["token"],"status":row["status"],"window":row["sound_window"],
+            "ticket":row["ticket"],"resumed":not created}
 
 
 def restore(code,form,user):
-    data=result(user,form.token)
-    payload,rating=data["input"],data["result"]
-    if payload["kind"]!="reline" or payload["ticket"]!=code:
-        raise HTTPException(409,"计算凭证不属于这张复线单")
-    focus=payload["focus"]
+    durable=retests.conclusion(form.token,code)
+    if durable is None:
+        data=result(user,form.token)
+        payload,rating=data["input"],data["result"]
+        if payload["kind"]!="reline" or payload["ticket"]!=code:
+            raise HTTPException(409,"计算凭证不属于这张复线单")
+        focus=payload["focus"]
+    else:
+        focus,rating=durable["focus"],durable["result"]
     with transaction() as conn:
         lock_patch(conn)
         ticket=one(conn,tickets,code,lock=True)
         point=one(conn,points,ticket["point"],lock=True)
+        if ticket["state"]==Ticket.RESTORED:
+            if ticket["reline_window"]==focus["code"]:
+                return one(conn,tickets,code)
+            raise HTTPException(409,"该隔离单已按其他复线窗复位，请查看原复位记录")
         ensure_reline(conn,ticket,focus)
         if rating["category"]!=Finding.NORMAL or focus["ring_index"]>.36:
             raise HTTPException(409,"复线后仍有异常或明显回响，保留隔离")

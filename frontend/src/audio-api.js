@@ -5,5 +5,5 @@ export const mixer = {
   diagnosis:body=>request('/feedback/diagnose',body), wait:awaitCompute,
   save:body=>request('/feedback/save',body), findings:()=>request('/feedback'),
   isolate:body=>request('/patch/isolate',body), probe:(code,body)=>request('/patch/'+code+'/probe',body),
-  restore:(code,body)=>request('/patch/'+code+'/restore',body),
+  retests:code=>request('/patch/'+code+'/retests'), restore:(code,body)=>request('/patch/'+code+'/restore',body),
 };

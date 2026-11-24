@@ -9,6 +9,7 @@ from core.db import metadata, transaction
 from core.config import SEED_DEMO
 from core.middleware import install
 from core.queueing import broker, view
+from domain import retests
 from domain.routes import routers
 from scripts.seed_demo import seed
 
@@ -21,6 +22,10 @@ async def lifespan(app):
             seed()
         except Exception:
             logging.getLogger('uvicorn.error').exception('demo seed failed')
+    try:
+        retests.recover()
+    except Exception:
+        logging.getLogger('uvicorn.error').exception('reline retest recovery failed')
     yield
 
 app = FastAPI(lifespan=lifespan)

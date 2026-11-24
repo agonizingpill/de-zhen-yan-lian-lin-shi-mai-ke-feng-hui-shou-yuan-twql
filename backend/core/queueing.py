@@ -9,8 +9,8 @@ from core.config import REDIS_URL
 broker = Redis.from_url(REDIS_URL, decode_responses=True)
 QUEUE = 'compute_requests'
 
-def submit(user, payload):
-    token = uuid4().hex
+def submit(user, payload, token=None):
+    token = token or uuid4().hex
     item = {'token': token, 'owner': user['sub'], 'input': payload}
     with broker.pipeline() as pipe:
         pipe.set(f'compute:{token}', json.dumps({'owner': user['sub'], 'status': 'queued'}), ex=86400)
@@ -19,6 +19,10 @@ def submit(user, payload):
     return {'token': token, 'status': 'queued'}
 
 def view(user, token):
+    from domain import retests
+    durable = retests.lookup(user, token)
+    if durable is not None:
+        return {k: v for k, v in durable.items() if k != 'requested_by'}
     raw = broker.get(f'compute:{token}')
     if raw is None:
         raise HTTPException(404, detail='计算任务不存在或已过期')

@@ -44,10 +44,12 @@ docker compose exec -T backend python -m scripts.seed_demo
 6. 09:20，第 90 刻度记录新样 `WIN-GOOD-RELINE`，验证同麦位、同备用路、新版本。
 7. 09:22，复核员签复位，现场总音控保持 BUS-C；BUS-A 的三个协作点留存原配置。
 
+复测按隔离单与声检窗配对留档：两名值守先后用同一 `WIN-GOOD-RELINE` 重试，会接回原来那张复测而不新增一条。计算若在排队或处理途中断，重启后按提交时的声检窗快照续算，不换成后来采集的新窗。复测结论只记录一次，迟到的重复回执不会覆盖已出结论。签复位若未收到回执，用同一凭证重试返回原复位记录，不重复留痕。采集到更新的复线窗后，旧窗结论仍可在复测履历中查看；尚未签发的复位必须改按新窗重测。
+
 ## 算法与源文件
 
 `backend/domain/learning.py` 从固定种子 217 的 32 个正常基线窗拟合 RobustScaler，再用 8 邻居的 novelty LOF 评估四项特征。读数为峰值频率占比、持续回响指数、整体声级、自身回路关联，范围均为 0 到 1。LOF 分数小于 −1.55 时尝试寻找同总线同刻度的相邻频率峰。在主峰偏差 25 Hz 内、峰占比至少 0.62 且回响至少 0.52 的麦位达到三个，即标记协作频带并保留。复线签发另外要求回响指数不高于 0.36。模型与阈值用于模拟声检样例。
 
-`soundboard.py` 与 `interventions.py` 定义领域表。`soundcheck.py` 记录声检和配线版本，`diagnose.py` 固定快照并检查迟到的同频证据，`channel.py` 保护共享路、隔离独立点并复位。前端位于 `frontend/src/pages/`。状态枚举在 `backend/domain/states.py` 与 `frontend/src/audio-state.js`，权限枚举在 `backend/core/roles.py`、`frontend/src/store.js`，使用于数据库约束、强制业务路径和显示。
+`soundboard.py` 与 `interventions.py` 定义领域表。`soundcheck.py` 记录声检和配线版本，`diagnose.py` 固定快照并检查迟到的同频证据，`channel.py` 保护共享路、隔离独立点并复位。`retests.py` 持久化每张隔离单的复测，负责重试去重、重启续算和结论只记一次的守卫。前端位于 `frontend/src/pages/`。状态枚举在 `backend/domain/states.py` 与 `frontend/src/audio-state.js`，权限枚举在 `backend/core/roles.py`、`frontend/src/store.js`，使用于数据库约束、强制业务路径和显示。
 
 源码以 MIT 许可提供，见 `LICENSE`。

@@ -15,6 +15,11 @@ def points(user=Depends(actor)):
     return catalog.patchboard()
 
 
+@patch.get("/{code}/retests")
+def retests(code:str,user=Depends(actor)):
+    return catalog.retest_ledger(code)
+
+
 @audio.get("")
 def windows(user=Depends(actor)):
     return catalog.audio()
